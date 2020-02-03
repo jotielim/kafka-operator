@@ -46,8 +46,8 @@ type disableScaling struct {
 }
 
 const (
-	// AddPVCCommand command name for addPvc
-	AddPVCCommand = "addPvc"
+	// AddPvcCommand command name for addPvc
+	AddPvcCommand = "addPvc"
 	// DownScaleCommand command name for donscale
 	DownScaleCommand = "downScale"
 	// UpScaleCommand command name for ipscale
@@ -59,7 +59,7 @@ const (
 // GetCommandList returns list of supported commands
 func GetCommandList() []string {
 	return []string{
-		AddPVCCommand,
+		AddPvcCommand,
 		DownScaleCommand,
 		UpScaleCommand,
 		ResizePvcCommand,
@@ -135,8 +135,8 @@ func (e *examiner) processAlert(ds disableScaling) (bool, error) {
 
 	switch e.Alert.Annotations["command"] {
 
-	case AddPVCCommand:
-		validators := AlertValidators{newAddPVCValidator(e.Alert)}
+	case AddPvcCommand:
+		validators := AlertValidators{newAddPvcValidator(e.Alert)}
 		if err := validators.ValidateAlert(); err != nil {
 			return false, err
 		}
@@ -210,7 +210,7 @@ func addPvc(alertLabels model.LabelSet, alertAnnotations model.LabelSet, client 
 
 	storageConfig := v1beta1.StorageConfig{
 		MountPath: pvc.Annotations["mountPath"] + "-" + randomIdentifier,
-		PVCSpec: &corev1.PersistentVolumeClaimSpec{
+		PvcSpec: &corev1.PersistentVolumeClaimSpec{
 			AccessModes: []corev1.PersistentVolumeAccessMode{
 				corev1.ReadWriteOnce,
 			},
@@ -318,7 +318,7 @@ func upScale(log logr.Logger, labels model.LabelSet, annotations model.LabelSet,
 				StorageConfigs: []v1beta1.StorageConfig{
 					{
 						MountPath: string(annotations["mountPath"]),
-						PVCSpec: &corev1.PersistentVolumeClaimSpec{
+						PvcSpec: &corev1.PersistentVolumeClaimSpec{
 							AccessModes: []corev1.PersistentVolumeAccessMode{
 								corev1.ReadWriteOnce,
 							},
