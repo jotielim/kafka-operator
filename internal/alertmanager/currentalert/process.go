@@ -26,7 +26,6 @@ import (
 	"github.com/banzaicloud/kafka-operator/pkg/scale"
 	"github.com/banzaicloud/kafka-operator/pkg/util"
 	"github.com/go-logr/logr"
-	"github.com/prometheus/common/log"
 	"github.com/prometheus/common/model"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -140,7 +139,7 @@ func (e *examiner) processAlert(ds disableScaling) (bool, error) {
 		if err := validators.ValidateAlert(); err != nil {
 			return false, err
 		}
-		err := addPvc(e.Alert.Labels, e.Alert.Annotations, e.Client)
+		err := addPvc(e.Log, e.Alert.Labels, e.Alert.Annotations, e.Client)
 		if err != nil {
 			return false, err
 		}
@@ -191,7 +190,7 @@ func (e *examiner) processAlert(ds disableScaling) (bool, error) {
 	return false, nil
 }
 
-func addPvc(alertLabels model.LabelSet, alertAnnotations model.LabelSet, client client.Client) error {
+func addPvc(log logr.Logger, alertLabels model.LabelSet, alertAnnotations model.LabelSet, client client.Client) error {
 	var storageClassName *string
 
 	if alertAnnotations["storageClass"] != "" {
@@ -203,13 +202,30 @@ func addPvc(alertLabels model.LabelSet, alertAnnotations model.LabelSet, client 
 		return err
 	}
 
+	kafkaCluster, err := k8sutil.GetCr(pvc.Labels["kafka_cr"], pvc.Labels["namespace"], client)
+	if err != nil {
+		return err
+	}
+
+	if ids := kafka.GetBrokersWithPendingOrRunningCCTask(kafkaCluster); len(ids) > 0 {
+		var keyVals []interface{}
+		for _, id := range ids {
+			brokerId := strconv.Itoa(int(id))
+			keyVals = append(keyVals, brokerId, kafkaCluster.Status.BrokersState[brokerId].GracefulActionState.CruiseControlState)
+		}
+
+		log.Info("addPvc is skipped as there are brokers which are pending task to be initiated in CC or already have a running CC task", keyVals...)
+
+		return nil
+	}
+
 	randomIdentifier, err := util.GetRandomString(6)
 	if err != nil {
 		return err
 	}
 
 	storageConfig := v1beta1.StorageConfig{
-		MountPath: pvc.Annotations["mountPath"] + "-" + randomIdentifier,
+		MountPath: pvc.Annotations["mountPathPrefix"] + "-" + randomIdentifier,
 		PvcSpec: &corev1.PersistentVolumeClaimSpec{
 			AccessModes: []corev1.PersistentVolumeAccessMode{
 				corev1.ReadWriteOnce,
@@ -221,8 +237,6 @@ func addPvc(alertLabels model.LabelSet, alertAnnotations model.LabelSet, client 
 				},
 			},
 		}}
-
-	log.Info(fmt.Sprintf("the following storageConfig was determined %+v", &storageConfig))
 
 	err = k8sutil.AddPvToSpecificBroker(pvc.Labels["brokerId"], pvc.Labels["kafka_cr"], pvc.Labels["namespace"], &storageConfig, client)
 	if err != nil {
@@ -317,7 +331,7 @@ func upScale(log logr.Logger, labels model.LabelSet, annotations model.LabelSet,
 				Image: string(annotations["image"]),
 				StorageConfigs: []v1beta1.StorageConfig{
 					{
-						MountPath: string(annotations["mountPath"]),
+						MountPath: string(annotations["mountPathPrefix"]),
 						PvcSpec: &corev1.PersistentVolumeClaimSpec{
 							AccessModes: []corev1.PersistentVolumeAccessMode{
 								corev1.ReadWriteOnce,
