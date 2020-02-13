@@ -241,7 +241,8 @@ func (r *Reconciler) Reconcile(log logr.Logger) error {
 
 	lbIPs := make([]string, 0)
 
-	if r.KafkaCluster.Spec.ListenersConfig.ExternalListeners != nil {
+	if r.KafkaCluster.Spec.ListenersConfig.ExternalListeners != nil &&
+		r.KafkaCluster.Spec.ListenersConfig.ExternalAccessConfig.ServiceType == string(corev1.ServiceTypeLoadBalancer) {
 		// TODO: This is a hack that needs to be banished when the time is right.
 		// Currently we only support one external listener but this will be fixed
 		// sometime in the future

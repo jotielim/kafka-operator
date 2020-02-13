@@ -16,6 +16,7 @@ require (
 	github.com/go-logr/logr v0.1.0
 	github.com/gogo/googleapis v1.2.0 // indirect
 	github.com/gogo/protobuf v1.3.0
+	github.com/goph/emperror v0.17.1
 	github.com/hashicorp/consul/api v1.2.0 // indirect
 	github.com/hashicorp/memberlist v0.1.5 // indirect
 	github.com/hashicorp/nomad/api v0.0.0-20191011173337-85153a5ecf46 // indirect

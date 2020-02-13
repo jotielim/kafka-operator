@@ -178,7 +178,7 @@ type StorageConfig struct {
 
 //ListenersConfig defines the Kafka listener types
 type ListenersConfig struct {
-	ExternalAccessConfig ExternalAccessConfig     `json:"externalConfig,omitempty"`
+	ExternalAccessConfig ExternalAccessConfig     `json:"externalAccessConfig,omitempty"`
 	ExternalListeners    []ExternalListenerConfig `json:"externalListeners,omitempty"`
 	InternalListeners    []InternalListenerConfig `json:"internalListeners"`
 	SSLSecrets           *SSLSecrets              `json:"sslSecrets,omitempty"`
