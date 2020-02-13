@@ -178,9 +178,24 @@ type StorageConfig struct {
 
 //ListenersConfig defines the Kafka listener types
 type ListenersConfig struct {
-	ExternalListeners []ExternalListenerConfig `json:"externalListeners,omitempty"`
-	InternalListeners []InternalListenerConfig `json:"internalListeners"`
-	SSLSecrets        *SSLSecrets              `json:"sslSecrets,omitempty"`
+	ExternalAccessConfig ExternalAccessConfig     `json:"externalConfig,omitempty"`
+	ExternalListeners    []ExternalListenerConfig `json:"externalListeners,omitempty"`
+	InternalListeners    []InternalListenerConfig `json:"internalListeners"`
+	SSLSecrets           *SSLSecrets              `json:"sslSecrets,omitempty"`
+}
+
+//
+// listenersConfig:
+//   externalConfig:
+//     serviceType: NodePort
+//     nodeAddressType: InternalIP
+//   externalListeners:
+//   internalListeners:
+//
+
+type ExternalAccessConfig struct {
+	ServiceType     string `json:"serviceType"`               // loadbalancer, nodeport
+	NodeAddressType string `json:"nodeAddressType,omitempty"` // externalIp, internalIp, hostname
 }
 
 // SSLSecrets defines the Kafka SSL secrets

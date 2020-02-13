@@ -31,6 +31,7 @@ import (
 	"github.com/imdario/mergo"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 var kafkaConfigTemplate = `
@@ -83,7 +84,7 @@ func (r *Reconciler) getConfigString(bConfig *v1beta1.BrokerConfig, id int32, lo
 		"ZookeeperConnectString":             zookeeperutils.PrepareConnectionAddress(r.KafkaCluster.Spec.ZKAddresses, r.KafkaCluster.Spec.GetZkPath()),
 		"CruiseControlBootstrapServers":      getInternalListener(r.KafkaCluster.Spec.ListenersConfig.InternalListeners, id, r.KafkaCluster.Namespace, r.KafkaCluster.Name, r.KafkaCluster.Spec.HeadlessServiceEnabled),
 		"StorageConfig":                      generateStorageConfig(bConfig.StorageConfigs),
-		"AdvertisedListenersConfig":          generateAdvertisedListenerConfig(id, r.KafkaCluster.Spec.ListenersConfig, loadBalancerIPs, r.KafkaCluster.Namespace, r.KafkaCluster.Name, r.KafkaCluster.Spec.HeadlessServiceEnabled),
+		"AdvertisedListenersConfig":          generateAdvertisedListenerConfig(r.Client, id, r.KafkaCluster.Spec.ListenersConfig, loadBalancerIPs, r.KafkaCluster.Namespace, r.KafkaCluster.Name, r.KafkaCluster.Spec.HeadlessServiceEnabled),
 		"SuperUsers":                         strings.Join(generateSuperUsers(superUsers), ";"),
 		"ServerKeystorePath":                 serverKeystorePath,
 		"ClientKeystorePath":                 clientKeystorePath,
@@ -119,12 +120,21 @@ func (r *Reconciler) configMap(id int32, brokerConfig *v1beta1.BrokerConfig, loa
 	}
 }
 
-func generateAdvertisedListenerConfig(id int32, l v1beta1.ListenersConfig, loadBalancerIPs []string, namespace, crName string, headlessServiceEnabled bool) string {
+func generateAdvertisedListenerConfig(client client.Client, id int32, l v1beta1.ListenersConfig, loadBalancerIPs []string, namespace, crName string, headlessServiceEnabled bool) string {
 	advertisedListenerConfig := []string{}
-	for _, eListener := range l.ExternalListeners {
-		// use first element of loadBalancerIPs slice for external listener name
-		advertisedListenerConfig = append(advertisedListenerConfig,
-			fmt.Sprintf("%s://%s:%d", strings.ToUpper(eListener.Name), loadBalancerIPs[0], eListener.ExternalStartingPort+id))
+	if l.ExternalAccessConfig.ServiceType == string(corev1.ServiceTypeNodePort) {
+
+		for _, eListener := range l.ExternalListeners {
+			// use first element of loadBalancerIPs slice for external listener name
+			advertisedListenerConfig = append(advertisedListenerConfig,
+				fmt.Sprintf("%s://%s:%d", strings.ToUpper(eListener.Name), "172.20.56.78", eListener.ExternalStartingPort+id))
+		}
+	} else {
+		for _, eListener := range l.ExternalListeners {
+			// use first element of loadBalancerIPs slice for external listener name
+			advertisedListenerConfig = append(advertisedListenerConfig,
+				fmt.Sprintf("%s://%s:%d", strings.ToUpper(eListener.Name), loadBalancerIPs[0], eListener.ExternalStartingPort+id))
+		}
 	}
 	for _, iListener := range l.InternalListeners {
 		if headlessServiceEnabled {

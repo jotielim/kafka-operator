@@ -1255,8 +1255,6 @@ spec:
                       items:
                         type: string
                       type: array
-                  required:
-                  - httpsRedirect
                   type: object
                 nodeSelector:
                   additionalProperties:
@@ -1327,6 +1325,15 @@ spec:
             listenersConfig:
               description: ListenersConfig defines the Kafka listener types
               properties:
+                externalConfig:
+                  properties:
+                    nodeAddressType:
+                      type: string
+                    serviceType:
+                      type: string
+                  required:
+                  - serviceType
+                  type: object
                 externalListeners:
                   items:
                     description: ExternalListenerConfig defines the external listener
@@ -1408,6 +1415,7 @@ spec:
                   - tlsSecretName
                   type: object
               required:
+              - externalConfig
               - internalListeners
               type: object
             monitoringConfig:
