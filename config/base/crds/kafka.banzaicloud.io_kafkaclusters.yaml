@@ -1165,6 +1165,7 @@ spec:
               enum:
               - envoy
               - istioingress
+              - none
               type: string
             istioIngressConfig:
               description: IstioIngressConfig defines the config for the Istio Ingress
@@ -1325,15 +1326,6 @@ spec:
             listenersConfig:
               description: ListenersConfig defines the Kafka listener types
               properties:
-                externalConfig:
-                  properties:
-                    nodeAddressType:
-                      type: string
-                    serviceType:
-                      type: string
-                  required:
-                  - serviceType
-                  type: object
                 externalListeners:
                   items:
                     description: ExternalListenerConfig defines the external listener
@@ -1348,6 +1340,24 @@ spec:
                       hostnameOverride:
                         type: string
                       name:
+                        type: string
+                      overrides:
+                        properties:
+                          brokers:
+                            items:
+                              properties:
+                                id:
+                                  format: int32
+                                  type: integer
+                                nodePort:
+                                  format: int32
+                                  type: integer
+                              required:
+                              - id
+                              type: object
+                            type: array
+                        type: object
+                      serviceType:
                         type: string
                       type:
                         type: string
@@ -1415,7 +1425,6 @@ spec:
                   - tlsSecretName
                   type: object
               required:
-              - externalConfig
               - internalListeners
               type: object
             monitoringConfig:
