@@ -47,7 +47,7 @@ type KafkaClusterSpec struct {
 	Brokers              []Broker                `json:"brokers"`
 	RollingUpgradeConfig RollingUpgradeConfig    `json:"rollingUpgradeConfig"`
 	// +kubebuilder:default=envoy
-	// +kubebuilder:validation:Enum=envoy;istioingress
+	// +kubebuilder:validation:Enum=envoy;istioingress;none
 	IngressController   string              `json:"ingressController,omitempty"`
 	OneBrokerPerNode    bool                `json:"oneBrokerPerNode"`
 	PropagateLabels     bool                `json:"propagateLabels,omitempty"`
@@ -178,24 +178,9 @@ type StorageConfig struct {
 
 //ListenersConfig defines the Kafka listener types
 type ListenersConfig struct {
-	ExternalAccessConfig ExternalAccessConfig     `json:"externalAccessConfig,omitempty"`
-	ExternalListeners    []ExternalListenerConfig `json:"externalListeners,omitempty"`
-	InternalListeners    []InternalListenerConfig `json:"internalListeners"`
-	SSLSecrets           *SSLSecrets              `json:"sslSecrets,omitempty"`
-}
-
-//
-// listenersConfig:
-//   externalConfig:
-//     serviceType: NodePort
-//     nodeAddressType: InternalIP
-//   externalListeners:
-//   internalListeners:
-//
-
-type ExternalAccessConfig struct {
-	ServiceType     string `json:"serviceType"`               // loadbalancer, nodeport
-	NodeAddressType string `json:"nodeAddressType,omitempty"` // externalIp, internalIp, hostname
+	ExternalListeners []ExternalListenerConfig `json:"externalListeners,omitempty"`
+	InternalListeners []InternalListenerConfig `json:"internalListeners"`
+	SSLSecrets        *SSLSecrets              `json:"sslSecrets,omitempty"`
 }
 
 // SSLSecrets defines the Kafka SSL secrets
@@ -235,11 +220,22 @@ type AlertManagerConfig struct {
 
 // ExternalListenerConfig defines the external listener config for Kafka
 type ExternalListenerConfig struct {
-	Type                 string `json:"type"`
-	Name                 string `json:"name"`
-	ExternalStartingPort int32  `json:"externalStartingPort"`
-	ContainerPort        int32  `json:"containerPort"`
-	HostnameOverride     string `json:"hostnameOverride,omitempty"`
+	ServiceType          string                    `json:"serviceType,omitempty"` // LoadBalancer, NodePort
+	Type                 string                    `json:"type"`
+	Name                 string                    `json:"name"`
+	ExternalStartingPort int32                     `json:"externalStartingPort"`
+	ContainerPort        int32                     `json:"containerPort"`
+	HostnameOverride     string                    `json:"hostnameOverride,omitempty"`
+	Overrides            ExternalListenerOverrides `json:"overrides,omitempty"`
+}
+
+type ExternalListenerOverrides struct {
+	Brokers []BrokersConfigOverride `json:"brokers,omitempty"`
+}
+
+type BrokersConfigOverride struct {
+	Id       int32 `json:"id"`
+	NodePort int32 `json:"nodePort,omitempty"`
 }
 
 // InternalListenerConfig defines the internal listener config for Kafka

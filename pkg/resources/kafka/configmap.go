@@ -122,20 +122,18 @@ func (r *Reconciler) configMap(id int32, brokerConfig *v1beta1.BrokerConfig, loa
 
 func generateAdvertisedListenerConfig(client client.Client, id int32, l v1beta1.ListenersConfig, loadBalancerIPs []string, namespace, crName string, headlessServiceEnabled bool) string {
 	advertisedListenerConfig := []string{}
-	if l.ExternalAccessConfig.ServiceType == string(corev1.ServiceTypeNodePort) {
 
-		for _, eListener := range l.ExternalListeners {
-			// use first element of loadBalancerIPs slice for external listener name
+	for _, eListener := range l.ExternalListeners {
+		if eListener.ServiceType == string(corev1.ServiceTypeNodePort) {
 			advertisedListenerConfig = append(advertisedListenerConfig,
 				fmt.Sprintf("%s://%s:%d", strings.ToUpper(eListener.Name), "172.20.56.78", eListener.ExternalStartingPort+id))
-		}
-	} else {
-		for _, eListener := range l.ExternalListeners {
+		} else {
 			// use first element of loadBalancerIPs slice for external listener name
 			advertisedListenerConfig = append(advertisedListenerConfig,
 				fmt.Sprintf("%s://%s:%d", strings.ToUpper(eListener.Name), loadBalancerIPs[0], eListener.ExternalStartingPort+id))
 		}
 	}
+
 	for _, iListener := range l.InternalListeners {
 		if headlessServiceEnabled {
 			advertisedListenerConfig = append(advertisedListenerConfig,

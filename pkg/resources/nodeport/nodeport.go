@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package nodePort
+package nodeport
 
 import (
 	"fmt"
@@ -32,7 +32,7 @@ import (
 )
 
 const (
-	componentName = "nodePort"
+	componentName = "nodeport"
 )
 
 // Reconciler implements the Component Reconciler
@@ -56,16 +56,19 @@ func (r *Reconciler) Reconcile(log logr.Logger) error {
 
 	log.V(1).Info("Reconciling")
 	if r.KafkaCluster.Spec.ListenersConfig.ExternalListeners != nil {
+
 		for _, externalListener := range r.KafkaCluster.Spec.ListenersConfig.ExternalListeners {
-			for _, broker := range r.KafkaCluster.Spec.Brokers {
-				o := r.nodePort(log, externalListener, broker, r.KafkaCluster.Name)
-				if err := k8sutil.Reconcile(log, r.Client, o, r.KafkaCluster); err != nil {
-					return emperror.WrapWith(
-						err,
-						"failed to reconcile resource",
-						"resource",
-						o.GetObjectKind().GroupVersionKind(),
-					)
+			if externalListener.ServiceType == string(corev1.ServiceTypeNodePort) {
+				for _, broker := range r.KafkaCluster.Spec.Brokers {
+					o := r.nodePort(log, externalListener, broker, r.KafkaCluster.Name)
+					if err := k8sutil.Reconcile(log, r.Client, o, r.KafkaCluster); err != nil {
+						return emperror.WrapWith(
+							err,
+							"failed to reconcile resource",
+							"resource",
+							o.GetObjectKind().GroupVersionKind(),
+						)
+					}
 				}
 			}
 		}
@@ -91,9 +94,22 @@ func (r *Reconciler) nodePort(log logr.Logger, externalListener v1beta1.External
 					Port:       externalListener.ContainerPort,
 					TargetPort: intstr.FromInt(int(externalListener.ContainerPort)),
 					Protocol:   corev1.ProtocolTCP,
+					NodePort:   getBrokerNodePort(externalListener, broker.Id),
 				},
 			},
-			//Type: corev1.ServiceTypeNodePort,
+			Type: corev1.ServiceTypeNodePort,
 		},
 	}
+}
+
+func getBrokerNodePort(externalListener v1beta1.ExternalListenerConfig, brokerId int32) (nodePort int32) {
+	if externalListener.Overrides.Brokers == nil {
+		return 0
+	}
+	for _, broker := range externalListener.Overrides.Brokers {
+		if broker.Id == brokerId {
+			return broker.NodePort
+		}
+	}
+	return 0
 }
