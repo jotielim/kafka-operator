@@ -57,10 +57,34 @@ func (r *Reconciler) Reconcile(log logr.Logger) error {
 	log.V(1).Info("Reconciling")
 	if r.KafkaCluster.Spec.ListenersConfig.ExternalListeners != nil {
 
-		for _, externalListener := range r.KafkaCluster.Spec.ListenersConfig.ExternalListeners {
-			if externalListener.ServiceType == string(corev1.ServiceTypeNodePort) {
+		for _, externalListenerConfig := range r.KafkaCluster.Spec.ListenersConfig.ExternalListeners {
+			if externalListenerConfig.ServiceType == string(corev1.ServiceTypeNodePort) {
+				// Create kafka-external-bootstrap svc
+				serviceName := fmt.Sprintf("%s-external-bootstrap", r.KafkaCluster.Name)
+				selector := map[string]string{
+					"app":      "kafka",
+					"kafka_cr": "kafka",
+				}
+				svc := r.nodePort(log, externalListenerConfig, serviceName, selector, externalListenerConfig.ExternalStartingPort)
+				if err := k8sutil.Reconcile(log, r.Client, svc, r.KafkaCluster); err != nil {
+					return emperror.WrapWith(
+						err,
+						"failed to reconcile resource",
+						"resource",
+						svc.GetObjectKind().GroupVersionKind(),
+					)
+				}
+
+				// Create svc for each broker
 				for _, broker := range r.KafkaCluster.Spec.Brokers {
-					o := r.nodePort(log, externalListener, broker, r.KafkaCluster.Name)
+					serviceName := fmt.Sprintf("%s-%d-svc", r.KafkaCluster.Name, broker.Id)
+					selector := map[string]string{
+						"app":      "kafka",
+						"kafka_cr": "kafka",
+						"brokerId": strconv.Itoa(int(broker.Id)),
+					}
+					nodePort := getBrokerNodePort(externalListenerConfig, broker.Id)
+					o := r.nodePort(log, externalListenerConfig, serviceName, selector, nodePort)
 					if err := k8sutil.Reconcile(log, r.Client, o, r.KafkaCluster); err != nil {
 						return emperror.WrapWith(
 							err,
@@ -79,22 +103,24 @@ func (r *Reconciler) Reconcile(log logr.Logger) error {
 	return nil
 }
 
-func (r *Reconciler) nodePort(log logr.Logger, externalListener v1beta1.ExternalListenerConfig,
-	broker v1beta1.Broker, clusterName string) runtime.Object {
+func (r *Reconciler) nodePort(
+	log logr.Logger,
+	externalListenerConfig v1beta1.ExternalListenerConfig,
+	serviceName string,
+	selector map[string]string,
+	nodePort int32,
+) runtime.Object {
 	return &corev1.Service{
-		ObjectMeta: templates.ObjectMeta(fmt.Sprintf("%s-%d-svc", clusterName, broker.Id), map[string]string{}, r.KafkaCluster),
+		ObjectMeta: templates.ObjectMeta(serviceName, map[string]string{}, r.KafkaCluster),
 		Spec: corev1.ServiceSpec{
-			Selector: map[string]string{
-				"app":      "kafka",
-				"brokerId": strconv.Itoa(int(broker.Id)),
-			},
+			Selector: selector,
 			Ports: []corev1.ServicePort{
 				{
-					Name:       fmt.Sprintf("broker-%d", broker.Id),
-					Port:       externalListener.ContainerPort,
-					TargetPort: intstr.FromInt(int(externalListener.ContainerPort)),
+					Name:       "external",
+					Port:       externalListenerConfig.ContainerPort,
+					TargetPort: intstr.FromInt(int(externalListenerConfig.ContainerPort)),
 					Protocol:   corev1.ProtocolTCP,
-					NodePort:   getBrokerNodePort(externalListener, broker.Id),
+					NodePort:   nodePort,
 				},
 			},
 			Type: corev1.ServiceTypeNodePort,
@@ -102,11 +128,11 @@ func (r *Reconciler) nodePort(log logr.Logger, externalListener v1beta1.External
 	}
 }
 
-func getBrokerNodePort(externalListener v1beta1.ExternalListenerConfig, brokerId int32) (nodePort int32) {
-	if externalListener.Overrides.Brokers == nil {
+func getBrokerNodePort(externalListenerConfig v1beta1.ExternalListenerConfig, brokerId int32) (nodePort int32) {
+	if externalListenerConfig.Overrides.Brokers == nil {
 		return 0
 	}
-	for _, broker := range externalListener.Overrides.Brokers {
+	for _, broker := range externalListenerConfig.Overrides.Brokers {
 		if broker.Id == brokerId {
 			return broker.NodePort
 		}
