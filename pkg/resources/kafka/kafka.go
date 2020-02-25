@@ -532,16 +532,19 @@ func (r *Reconciler) reconcileKafkaPod(log logr.Logger, desiredPod *corev1.Pod) 
 			log.Info(fmt.Sprintf("**** 2 YL - brokerId: %s", brokerId))
 			log.Info(fmt.Sprintf("**** 2 YL - currentPod.Spec.NodeName: %s", currentPod.Spec.NodeName))
 
+			log.Info("Start getting node list")
 			nodeList := &corev1.NodeList{}
-			err := r.Client.List(context.TODO(), nodeList, client.InNamespace(currentPod.Namespace))
+			err := r.Client.List(context.Background(), nodeList)
 			if err != nil {
 				log.Error(err, "Unable to get node list")
 			}
+			log.Info(fmt.Sprintf("len: %d", len(nodeList.Items)))
 			for _, node := range nodeList.Items {
 				for _, address := range node.Status.Addresses {
 					log.Info(fmt.Sprintf("**** YL - node: %s, address: %s, type: %s", node.Name, address.Address, address.Type))
 				}
 			}
+			log.Info("End getting node list")
 
 			if r.KafkaCluster.Spec.RackAwareness != nil {
 				rackAwarenessState, err := k8sutil.UpdateCrWithRackAwarenessConfig(currentPod, r.KafkaCluster, r.Client)
