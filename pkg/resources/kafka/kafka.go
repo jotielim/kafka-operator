@@ -547,12 +547,10 @@ func (r *Reconciler) reconcileKafkaPod(log logr.Logger, desiredPod *corev1.Pod) 
 			//log.Info("End getting node list")
 			if currentPod.Spec.NodeName != "" {
 				log.Info("**** start get node by name")
-				node := &corev1.Node{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: currentPod.Spec.NodeName,
-					},
-				}
-				err := r.Client.Get(context.Background(), client.ObjectKey{}, node)
+				node := &corev1.Node{}
+				err := r.Client.Get(context.Background(), client.ObjectKey{
+					Name: currentPod.Spec.NodeName,
+				}, node)
 				if err != nil {
 					log.Error(err, "Unable to get node")
 				}
