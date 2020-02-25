@@ -317,6 +317,7 @@ func (r *Reconciler) Reconcile(log logr.Logger) error {
 				return errors.WrapIfWithDetails(err, "failed to reconcile resource", "resource", o.GetObjectKind().GroupVersionKind())
 			}
 		}
+		log.Info("**** YL - Reconcile pod")
 		o := r.pod(broker.Id, brokerConfig, pvcs, log)
 		err = r.reconcileKafkaPod(log, o.(*corev1.Pod))
 		if err != nil {
@@ -482,7 +483,7 @@ func (r *Reconciler) reconcileKafkaPod(log logr.Logger, desiredPod *corev1.Pod) 
 	desiredType := reflect.TypeOf(desiredPod)
 
 	log = log.WithValues("kind", desiredType)
-	log.V(1).Info("searching with label because name is empty", "brokerId", desiredPod.Labels["brokerId"])
+	log.Info("searching with label because name is empty", "brokerId", desiredPod.Labels["brokerId"])
 
 	podList := &corev1.PodList{}
 
@@ -525,6 +526,8 @@ func (r *Reconciler) reconcileKafkaPod(log logr.Logger, desiredPod *corev1.Pod) 
 	} else if len(podList.Items) == 1 {
 		currentPod = podList.Items[0].DeepCopy()
 		brokerId := currentPod.Labels["brokerId"]
+		log.Info(fmt.Sprintf("**** YL - brokerId: %s", brokerId))
+		log.Info(fmt.Sprintf("**** YL - currentPod.Spec.NodeName: %s", currentPod.Spec.NodeName))
 		if _, ok := r.KafkaCluster.Status.BrokersState[brokerId]; ok {
 			if r.KafkaCluster.Spec.RackAwareness != nil {
 				rackAwarenessState, err := k8sutil.UpdateCrWithRackAwarenessConfig(currentPod, r.KafkaCluster, r.Client)
