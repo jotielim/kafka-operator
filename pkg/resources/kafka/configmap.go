@@ -84,7 +84,7 @@ func (r *Reconciler) getConfigString(bConfig *v1beta1.BrokerConfig, id int32, lo
 		"ZookeeperConnectString":             zookeeperutils.PrepareConnectionAddress(r.KafkaCluster.Spec.ZKAddresses, r.KafkaCluster.Spec.GetZkPath()),
 		"CruiseControlBootstrapServers":      getInternalListener(r.KafkaCluster.Spec.ListenersConfig.InternalListeners, id, r.KafkaCluster.Namespace, r.KafkaCluster.Name, r.KafkaCluster.Spec.HeadlessServiceEnabled),
 		"StorageConfig":                      generateStorageConfig(bConfig.StorageConfigs),
-		"AdvertisedListenersConfig":          generateAdvertisedListenerConfig(r.Client, id, r.KafkaCluster.Spec.ListenersConfig, loadBalancerIPs, r.KafkaCluster.Namespace, r.KafkaCluster.Name, r.KafkaCluster.Spec.HeadlessServiceEnabled),
+		"AdvertisedListenersConfig":          generateAdvertisedListenerConfig(r.Client, id, r.KafkaCluster.Spec.ListenersConfig, loadBalancerIPs, r.KafkaCluster.Namespace, r.KafkaCluster.Name, r.KafkaCluster.Spec.HeadlessServiceEnabled, log),
 		"SuperUsers":                         strings.Join(generateSuperUsers(superUsers), ";"),
 		"ServerKeystorePath":                 serverKeystorePath,
 		"ClientKeystorePath":                 clientKeystorePath,
@@ -120,7 +120,7 @@ func (r *Reconciler) configMap(id int32, brokerConfig *v1beta1.BrokerConfig, loa
 	}
 }
 
-func generateAdvertisedListenerConfig(client client.Client, id int32, l v1beta1.ListenersConfig, loadBalancerIPs []string, namespace, crName string, headlessServiceEnabled bool) string {
+func generateAdvertisedListenerConfig(client client.Client, id int32, l v1beta1.ListenersConfig, loadBalancerIPs []string, namespace, crName string, headlessServiceEnabled bool, log logr.Logger) string {
 	advertisedListenerConfig := []string{}
 
 	for _, eListener := range l.ExternalListeners {
@@ -136,6 +136,7 @@ func generateAdvertisedListenerConfig(client client.Client, id int32, l v1beta1.
 			if len(loadBalancerIPs) > 0 {
 				ip = loadBalancerIPs[0]
 			}
+			log.Info(fmt.Sprintf("ip: %s", ip))
 			advertisedListenerConfig = append(advertisedListenerConfig,
 				fmt.Sprintf("%s://%s:%d", strings.ToUpper(eListener.Name), ip, brokerConfigOverride.NodePort))
 		} else {
