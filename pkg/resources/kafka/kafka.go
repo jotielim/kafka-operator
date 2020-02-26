@@ -549,7 +549,8 @@ func (r *Reconciler) reconcileKafkaPod(log logr.Logger, desiredPod *corev1.Pod) 
 				log.Info("**** start get node by name")
 				node := &corev1.Node{}
 				err := r.Client.Get(context.Background(), client.ObjectKey{
-					Name: currentPod.Spec.NodeName,
+					Namespace: r.KafkaCluster.Namespace,
+					Name:      currentPod.Spec.NodeName,
 				}, node)
 				if err != nil {
 					log.Error(err, "Unable to get node")
@@ -558,6 +559,17 @@ func (r *Reconciler) reconcileKafkaPod(log logr.Logger, desiredPod *corev1.Pod) 
 					log.Info(fmt.Sprintf("**** YL - node: %s, address: %s, type: %s", node.Name, address.Address, address.Type))
 				}
 				log.Info("**** end get node by name")
+
+				log.Info("**** get configmap")
+				configMap := &corev1.ConfigMap{}
+				err = r.Client.Get(context.Background(), client.ObjectKey{
+					Namespace: r.KafkaCluster.Namespace,
+					Name:      fmt.Sprintf(brokerConfigTemplate+"-%s", r.KafkaCluster.Name, brokerId),
+				}, configMap)
+				if err != nil {
+					log.Error(err, "Unable to get configMap")
+				}
+				log.Info(fmt.Sprintf("broker-config: %s", configMap.Data["broker-config"]))
 			}
 
 			if r.KafkaCluster.Spec.RackAwareness != nil {
