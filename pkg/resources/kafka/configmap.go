@@ -124,21 +124,21 @@ func generateAdvertisedListenerConfig(client client.Client, id int32, l v1beta1.
 	advertisedListenerConfig := []string{}
 
 	for _, eListener := range l.ExternalListeners {
-		if eListener.ServiceType == string(corev1.ServiceTypeNodePort) {
-			var brokerConfigOverride v1beta1.BrokersConfigOverride
-			for _, broker := range eListener.Overrides.Brokers {
-				if broker.Id == id {
-					brokerConfigOverride = broker
-					break
-				}
-			}
-			advertisedListenerConfig = append(advertisedListenerConfig,
-				fmt.Sprintf("%s://%s:%d", strings.ToUpper(eListener.Name), "172.20.56.78", brokerConfigOverride.NodePort))
-		} else {
-			// use first element of loadBalancerIPs slice for external listener name
-			advertisedListenerConfig = append(advertisedListenerConfig,
-				fmt.Sprintf("%s://%s:%d", strings.ToUpper(eListener.Name), loadBalancerIPs[0], eListener.ExternalStartingPort+id))
-		}
+		//if eListener.ServiceType == string(corev1.ServiceTypeNodePort) {
+		//	var brokerConfigOverride v1beta1.BrokersConfigOverride
+		//	for _, broker := range eListener.Overrides.Brokers {
+		//		if broker.Id == id {
+		//			brokerConfigOverride = broker
+		//			break
+		//		}
+		//	}
+		//	advertisedListenerConfig = append(advertisedListenerConfig,
+		//		fmt.Sprintf("%s://%s:%d", strings.ToUpper(eListener.Name), "172.20.56.78", brokerConfigOverride.NodePort))
+		//} else {
+		// use first element of loadBalancerIPs slice for external listener name
+		advertisedListenerConfig = append(advertisedListenerConfig,
+			fmt.Sprintf("%s://%s:%d", strings.ToUpper(eListener.Name), loadBalancerIPs[0], eListener.ExternalStartingPort+id))
+		//}
 	}
 
 	for _, iListener := range l.InternalListeners {
