@@ -107,6 +107,7 @@ func generateSuperUsers(users []string) (suStrings []string) {
 }
 
 func (r *Reconciler) configMap(id int32, brokerConfig *v1beta1.BrokerConfig, loadBalancerIPs []string, serverPass, clientPass string, superUsers []string, log logr.Logger) runtime.Object {
+	log.Info("ConfigMap is called")
 	return &corev1.ConfigMap{
 		ObjectMeta: templates.ObjectMeta(
 			fmt.Sprintf(brokerConfigTemplate+"-%d", r.KafkaCluster.Name, id),
@@ -132,11 +133,14 @@ func generateAdvertisedListenerConfig(client client.Client, id int32, l v1beta1.
 					break
 				}
 			}
-			ip := ""
-			if len(loadBalancerIPs) > 0 {
-				ip = loadBalancerIPs[0]
-			}
+			//ip := ""
+			//if len(loadBalancerIPs) > 0 {
+			//	ip = loadBalancerIPs[0]
+			//}
+			parsedReadOnlyConfig := util.ParsePropertiesFormat(brokerConfigOverride.ReadOnlyConfig)
+			ip := parsedReadOnlyConfig["node.ip"]
 			log.Info(fmt.Sprintf("ip: %s", ip))
+
 			advertisedListenerConfig = append(advertisedListenerConfig,
 				fmt.Sprintf("%s://%s:%d", strings.ToUpper(eListener.Name), ip, brokerConfigOverride.NodePort))
 		} else {

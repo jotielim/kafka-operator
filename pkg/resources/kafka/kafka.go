@@ -287,15 +287,37 @@ func (r *Reconciler) Reconcile(log logr.Logger) error {
 			}
 
 		}
-		if r.KafkaCluster.Spec.RackAwareness == nil {
+		hasNodePort := false
+		hasNodeIp := false
+		for _, eListener := range r.KafkaCluster.Spec.ListenersConfig.ExternalListeners {
+			if eListener.ServiceType == string(corev1.ServiceTypeNodePort) {
+				hasNodePort = true
+				for _, brokerConfigOverride := range eListener.Overrides.Brokers {
+					if brokerConfigOverride.Id == broker.Id && strings.Contains(brokerConfigOverride.ReadOnlyConfig, "node.ip=") {
+						hasNodeIp = true
+					}
+				}
+			}
+		}
+		if r.KafkaCluster.Spec.RackAwareness == nil && !hasNodePort {
+			log.Info("**** configMap 1")
 			o := r.configMap(broker.Id, brokerConfig, lbIPs, serverPass, clientPass, superUsers, log)
 			err := k8sutil.Reconcile(log, r.Client, o, r.KafkaCluster)
 			if err != nil {
 				return errors.WrapIfWithDetails(err, "failed to reconcile resource", "resource", o.GetObjectKind().GroupVersionKind())
 			}
 		} else {
+			if hasNodePort && hasNodeIp {
+				log.Info("**** configMap 2")
+				o := r.configMap(broker.Id, brokerConfig, lbIPs, serverPass, clientPass, superUsers, log)
+				err := k8sutil.Reconcile(log, r.Client, o, r.KafkaCluster)
+				if err != nil {
+					return errors.WrapIfWithDetails(err, "failed to reconcile resource", "resource", o.GetObjectKind().GroupVersionKind())
+				}
+			}
 			if brokerState, ok := r.KafkaCluster.Status.BrokersState[strconv.Itoa(int(broker.Id))]; ok {
 				if brokerState.RackAwarenessState != "" {
+					log.Info("**** configMap 3")
 					o := r.configMap(broker.Id, brokerConfig, lbIPs, serverPass, clientPass, superUsers, log)
 					err := k8sutil.Reconcile(log, r.Client, o, r.KafkaCluster)
 					if err != nil {
@@ -549,20 +571,25 @@ func (r *Reconciler) reconcileKafkaPod(log logr.Logger, desiredPod *corev1.Pod) 
 				log.Info("**** start get node by name")
 				node := &corev1.Node{}
 				err := r.Client.Get(context.Background(), client.ObjectKey{
-					Name: currentPod.Spec.NodeName,
+					Namespace: "",
+					Name:      currentPod.Spec.NodeName,
 				}, node)
 				if err != nil {
 					log.Error(err, "Unable to get node")
 				}
 
 				lbIPs := make([]string, 0)
+				nodeIP := ""
 				for _, address := range node.Status.Addresses {
 					log.Info(fmt.Sprintf("**** YL - node: %s, address: %s, type: %s", node.Name, address.Address, address.Type))
+					// TODO: get IP in order of ExternalIP, ExternalDNS, InternalIP, InternalDNS, Host
 					if address.Type == corev1.NodeInternalIP {
 						lbIPs = append(lbIPs, address.Address)
+						nodeIP = address.Address
 					}
 				}
 				log.Info(fmt.Sprintf("lbIPs: %v", lbIPs))
+				log.Info(fmt.Sprintf("nodeIP: %s", nodeIP))
 				log.Info("**** end get node by name")
 
 				log.Info("**** get configmap")
@@ -576,38 +603,70 @@ func (r *Reconciler) reconcileKafkaPod(log logr.Logger, desiredPod *corev1.Pod) 
 				}
 				log.Info(fmt.Sprintf("broker-config: %s", configMap.Data["broker-config"]))
 
-				if !strings.Contains(configMap.Data["broker-config"], lbIPs[0]) {
-					// We need to grab names for servers and client in case user is enabling ACLs
-					// That way we can continue to manage topics and users
-					serverPass, clientPass, superUsers, err := r.getServerAndClientDetails()
-					if err != nil {
-						return err
-					}
-					var broker v1beta1.Broker
-					for _, b := range r.KafkaCluster.Spec.Brokers {
-						log.Info(fmt.Sprintf("strconv.Itoa(int(b.Id)): %s, b.Id: %s, brokerId: %s", strconv.Itoa(int(b.Id)), b.Id, brokerId))
-						if strconv.Itoa(int(b.Id)) == brokerId {
-							log.Info(fmt.Sprintf("b.Id: %s, brokerId: %s", b.Id, brokerId))
-							broker = b
-							break
+				// TODO: store nodeIP in brokerConfigOverride.ReadOnlyConfig
+				externalListeners := make([]v1beta1.ExternalListenerConfig, 0)
+				for _, eListener := range r.KafkaCluster.Spec.ListenersConfig.ExternalListeners {
+					log.Info(fmt.Sprintf("eListener name: %s", eListener.Name))
+					if eListener.ServiceType == string(corev1.ServiceTypeNodePort) {
+						brokers := make([]v1beta1.BrokersConfigOverride, 0)
+						for _, brokerConfigOverride := range eListener.Overrides.Brokers {
+							log.Info(fmt.Sprintf("brokerConfigOverride.Id: %d, brokerId: %s", brokerConfigOverride.Id, brokerId))
+							if strconv.Itoa(int(brokerConfigOverride.Id)) == brokerId {
+								if !strings.Contains(brokerConfigOverride.ReadOnlyConfig, "node.ip=") {
+									brokerConfigOverride.ReadOnlyConfig += fmt.Sprintf("node.ip=%s\n", nodeIP)
+								}
+							}
+							log.Info(fmt.Sprintf("brokerConfigOverride.ReadOnlyConfig: %s", brokerConfigOverride.ReadOnlyConfig))
+							brokers = append(brokers, brokerConfigOverride)
 						}
+						eListener.Overrides.Brokers = brokers
 					}
-					brokerConfig, err := util.GetBrokerConfig(broker, r.KafkaCluster.Spec)
-					if err != nil {
-						log.Error(err, "unable to get broker config")
-						return err
-					}
-					log.Info(fmt.Sprintf("broker: %v", broker))
-					log.Info(fmt.Sprintf("brokerConfig: %v", brokerConfig))
-					typeMeta := r.KafkaCluster.TypeMeta
-					o := r.configMap(broker.Id, brokerConfig, lbIPs, serverPass, clientPass, superUsers, log)
-					err = r.Client.Update(context.TODO(), o)
-					//err = k8sutil.Reconcile(log, r.Client, o, r.KafkaCluster)
-					if err != nil {
-						return errors.WrapIfWithDetails(err, "failed to reconcile resource", "resource", o.GetObjectKind().GroupVersionKind())
-					}
-					r.KafkaCluster.TypeMeta = typeMeta
+					externalListeners = append(externalListeners, eListener)
 				}
+				r.KafkaCluster.Spec.ListenersConfig.ExternalListeners = externalListeners
+
+				i, _ := strconv.Atoi(brokerId)
+				log.Info(fmt.Sprintf("broker override readOnlyConfig: %s", r.KafkaCluster.Spec.ListenersConfig.ExternalListeners[0].Overrides.Brokers[i].ReadOnlyConfig))
+
+				typeMeta := r.KafkaCluster.TypeMeta
+				err = r.Client.Update(context.TODO(), r.KafkaCluster)
+				if err != nil {
+					return errors.WrapIfWithDetails(err, "failed to reconcile resource", "resource")
+				}
+				r.KafkaCluster.TypeMeta = typeMeta
+
+				//if !strings.Contains(configMap.Data["broker-config"], lbIPs[0]) {
+				//	// We need to grab names for servers and client in case user is enabling ACLs
+				//	// That way we can continue to manage topics and users
+				//	//serverPass, clientPass, superUsers, err := r.getServerAndClientDetails()
+				//	//if err != nil {
+				//	//	return err
+				//	//}
+				//	var broker v1beta1.Broker
+				//	for _, b := range r.KafkaCluster.Spec.Brokers {
+				//		log.Info(fmt.Sprintf("strconv.Itoa(int(b.Id)): %s, b.Id: %d, brokerId: %s", strconv.Itoa(int(b.Id)), b.Id, brokerId))
+				//		if strconv.Itoa(int(b.Id)) == brokerId {
+				//			log.Info(fmt.Sprintf("b.Id: %d, brokerId: %s", b.Id, brokerId))
+				//			broker = b
+				//			break
+				//		}
+				//	}
+				//	brokerConfig, err := util.GetBrokerConfig(broker, r.KafkaCluster.Spec)
+				//	if err != nil {
+				//		log.Error(err, "unable to get broker config")
+				//		return err
+				//	}
+				//	log.Info(fmt.Sprintf("broker: %v", broker))
+				//	log.Info(fmt.Sprintf("brokerConfig: %v", brokerConfig))
+				//	typeMeta := r.KafkaCluster.TypeMeta
+				//	//o := r.configMap(broker.Id, brokerConfig, lbIPs, serverPass, clientPass, superUsers, log)
+				//	//err = r.Client.Update(context.TODO(), o)
+				//	////err = k8sutil.Reconcile(log, r.Client, o, r.KafkaCluster)
+				//	//if err != nil {
+				//	//	return errors.WrapIfWithDetails(err, "failed to reconcile resource", "resource", o.GetObjectKind().GroupVersionKind())
+				//	//}
+				//	r.KafkaCluster.TypeMeta = typeMeta
+				//}
 			}
 
 			if r.KafkaCluster.Spec.RackAwareness != nil {
@@ -671,7 +730,7 @@ func (r *Reconciler) reconcileKafkaPod(log logr.Logger, desiredPod *corev1.Pod) 
 				return nil
 			}
 		} else {
-			log.V(1).Info("resource diffs",
+			log.Info("resource diffs",
 				"patch", string(patchResult.Patch),
 				"current", string(patchResult.Current),
 				"modified", string(patchResult.Modified),

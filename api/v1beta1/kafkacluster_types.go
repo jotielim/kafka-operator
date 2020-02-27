@@ -234,8 +234,9 @@ type ExternalListenerOverrides struct {
 }
 
 type BrokersConfigOverride struct {
-	Id       int32 `json:"id"`
-	NodePort int32 `json:"nodePort,omitempty"`
+	Id             int32  `json:"id"`
+	NodePort       int32  `json:"nodePort,omitempty"`
+	ReadOnlyConfig string `json:"readOnlyConfig,omitempty"`
 }
 
 // InternalListenerConfig defines the internal listener config for Kafka
