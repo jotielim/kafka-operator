@@ -599,7 +599,8 @@ func (r *Reconciler) reconcileKafkaPod(log logr.Logger, desiredPod *corev1.Pod) 
 				log.Info(fmt.Sprintf("broker: %v", broker))
 				log.Info(fmt.Sprintf("brokerConfig: %v", brokerConfig))
 				o := r.configMap(broker.Id, brokerConfig, lbIPs, serverPass, clientPass, superUsers, log)
-				err = k8sutil.Reconcile(log, r.Client, o, r.KafkaCluster)
+				err = r.Client.Update(context.TODO(), o)
+				//err = k8sutil.Reconcile(log, r.Client, o, r.KafkaCluster)
 				if err != nil {
 					return errors.WrapIfWithDetails(err, "failed to reconcile resource", "resource", o.GetObjectKind().GroupVersionKind())
 				}
