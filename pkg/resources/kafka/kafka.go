@@ -590,6 +590,12 @@ func (r *Reconciler) reconcileKafkaPod(log logr.Logger, desiredPod *corev1.Pod) 
 					}
 				}
 				brokerConfig, err := util.GetBrokerConfig(broker, r.KafkaCluster.Spec)
+				if err != nil {
+					log.Error(err, "unable to get broker config")
+					return err
+				}
+				log.Info(fmt.Sprintf("broker: %v", broker))
+				log.Info(fmt.Sprintf("brokerConfig: %v", brokerConfig))
 				o := r.configMap(broker.Id, brokerConfig, lbIPs, serverPass, clientPass, superUsers, log)
 				err = k8sutil.Reconcile(log, r.Client, o, r.KafkaCluster)
 				if err != nil {
