@@ -132,7 +132,7 @@ func generateAdvertisedListenerConfig(client client.Client, id int32, l v1beta1.
 					break
 				}
 			}
-			ip := "172.20.56.78"
+			ip := ""
 			if len(loadBalancerIPs) > 0 {
 				ip = loadBalancerIPs[0]
 			}
