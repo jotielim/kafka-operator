@@ -584,7 +584,9 @@ func (r *Reconciler) reconcileKafkaPod(log logr.Logger, desiredPod *corev1.Pod) 
 				}
 				var broker v1beta1.Broker
 				for _, b := range r.KafkaCluster.Spec.Brokers {
-					if string(b.Id) == brokerId {
+					log.Info(fmt.Sprintf("strconv.Itoa(int(b.Id)): %s, string(b.Id): %s, brokerId: %s", strconv.Itoa(int(broker.Id)), string(b.Id), brokerId))
+					if strconv.Itoa(int(b.Id)) == brokerId {
+						log.Info(fmt.Sprintf("b.Id: %s, brokerId: %s", b.Id, brokerId))
 						broker = b
 						break
 					}
