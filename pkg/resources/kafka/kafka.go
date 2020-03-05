@@ -241,7 +241,8 @@ func (r *Reconciler) Reconcile(log logr.Logger) error {
 
 	lbIPs := make([]string, 0)
 
-	if r.KafkaCluster.Spec.ListenersConfig.ExternalListeners != nil {
+	if r.KafkaCluster.Spec.ListenersConfig.ExternalListeners != nil &&
+		r.KafkaCluster.Spec.ListenersConfig.ExternalListeners[0].ServiceType != string(corev1.ServiceTypeNodePort) {
 		// TODO: This is a hack that needs to be banished when the time is right.
 		// Currently we only support one external listener but this will be fixed
 		// sometime in the future
@@ -286,13 +287,32 @@ func (r *Reconciler) Reconcile(log logr.Logger) error {
 			}
 
 		}
-		if r.KafkaCluster.Spec.RackAwareness == nil {
+		hasNodePort := false
+		hasNodeIp := false
+		for _, eListener := range r.KafkaCluster.Spec.ListenersConfig.ExternalListeners {
+			if eListener.ServiceType == string(corev1.ServiceTypeNodePort) {
+				hasNodePort = true
+				for _, brokerConfigOverride := range eListener.Overrides.Brokers {
+					if brokerConfigOverride.Id == broker.Id && strings.Contains(brokerConfigOverride.ReadOnlyConfig, "node.address=") {
+						hasNodeIp = true
+					}
+				}
+			}
+		}
+		if r.KafkaCluster.Spec.RackAwareness == nil && !hasNodePort {
 			o := r.configMap(broker.Id, brokerConfig, lbIPs, serverPass, clientPass, superUsers, log)
 			err := k8sutil.Reconcile(log, r.Client, o, r.KafkaCluster)
 			if err != nil {
 				return errors.WrapIfWithDetails(err, "failed to reconcile resource", "resource", o.GetObjectKind().GroupVersionKind())
 			}
 		} else {
+			if hasNodePort && hasNodeIp {
+				o := r.configMap(broker.Id, brokerConfig, lbIPs, serverPass, clientPass, superUsers, log)
+				err := k8sutil.Reconcile(log, r.Client, o, r.KafkaCluster)
+				if err != nil {
+					return errors.WrapIfWithDetails(err, "failed to reconcile resource", "resource", o.GetObjectKind().GroupVersionKind())
+				}
+			}
 			if brokerState, ok := r.KafkaCluster.Status.BrokersState[strconv.Itoa(int(broker.Id))]; ok {
 				if brokerState.RackAwarenessState != "" {
 					o := r.configMap(broker.Id, brokerConfig, lbIPs, serverPass, clientPass, superUsers, log)
@@ -317,7 +337,7 @@ func (r *Reconciler) Reconcile(log logr.Logger) error {
 			}
 		}
 		o := r.pod(broker.Id, brokerConfig, pvcs, log)
-		err = r.reconcileKafkaPod(log, o.(*corev1.Pod))
+		err = r.reconcileKafkaPod(log, o.(*corev1.Pod), hasNodePort)
 		if err != nil {
 			return err
 		}
@@ -476,12 +496,12 @@ func (r *Reconciler) reconcileClusterWideDynamicConfig(log logr.Logger) error {
 	return nil
 }
 
-func (r *Reconciler) reconcileKafkaPod(log logr.Logger, desiredPod *corev1.Pod) error {
+func (r *Reconciler) reconcileKafkaPod(log logr.Logger, desiredPod *corev1.Pod, hasNodePort bool) error {
 	currentPod := desiredPod.DeepCopy()
 	desiredType := reflect.TypeOf(desiredPod)
 
 	log = log.WithValues("kind", desiredType)
-	log.V(1).Info("searching with label because name is empty", "brokerId", desiredPod.Labels["brokerId"])
+	log.Info("searching with label because name is empty", "brokerId", desiredPod.Labels["brokerId"])
 
 	podList := &corev1.PodList{}
 
@@ -525,6 +545,16 @@ func (r *Reconciler) reconcileKafkaPod(log logr.Logger, desiredPod *corev1.Pod) 
 		currentPod = podList.Items[0].DeepCopy()
 		brokerId := currentPod.Labels["brokerId"]
 		if _, ok := r.KafkaCluster.Status.BrokersState[brokerId]; ok {
+			if hasNodePort {
+				nodePortState, err := k8sutil.UpdateCrWithNodePortConfig(currentPod, r.KafkaCluster, r.Client)
+				if err != nil {
+					return err
+				}
+				statusErr := k8sutil.UpdateBrokerStatus(r.Client, []string{brokerId}, r.KafkaCluster, nodePortState, log)
+				if statusErr != nil {
+					return errorfactory.New(errorfactory.StatusUpdateError{}, err, "updating status for resource failed", "kind", desiredType)
+				}
+			}
 			if r.KafkaCluster.Spec.RackAwareness != nil {
 				rackAwarenessState, err := k8sutil.UpdateCrWithRackAwarenessConfig(currentPod, r.KafkaCluster, r.Client)
 				if err != nil {
@@ -586,7 +616,7 @@ func (r *Reconciler) reconcileKafkaPod(log logr.Logger, desiredPod *corev1.Pod) 
 				return nil
 			}
 		} else {
-			log.V(1).Info("resource diffs",
+			log.Info("resource diffs",
 				"patch", string(patchResult.Patch),
 				"current", string(patchResult.Current),
 				"modified", string(patchResult.Modified),

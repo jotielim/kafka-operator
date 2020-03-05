@@ -47,7 +47,7 @@ type KafkaClusterSpec struct {
 	Brokers              []Broker                `json:"brokers"`
 	RollingUpgradeConfig RollingUpgradeConfig    `json:"rollingUpgradeConfig"`
 	// +kubebuilder:default=envoy
-	// +kubebuilder:validation:Enum=envoy;istioingress
+	// +kubebuilder:validation:Enum=envoy;istioingress;none
 	IngressController   string              `json:"ingressController,omitempty"`
 	OneBrokerPerNode    bool                `json:"oneBrokerPerNode"`
 	PropagateLabels     bool                `json:"propagateLabels,omitempty"`
@@ -220,11 +220,24 @@ type AlertManagerConfig struct {
 
 // ExternalListenerConfig defines the external listener config for Kafka
 type ExternalListenerConfig struct {
-	Type                 string `json:"type"`
-	Name                 string `json:"name"`
-	ExternalStartingPort int32  `json:"externalStartingPort"`
-	ContainerPort        int32  `json:"containerPort"`
-	HostnameOverride     string `json:"hostnameOverride,omitempty"`
+	ServiceType          string                    `json:"serviceType,omitempty"` // LoadBalancer, NodePort
+	NodeAddressType      corev1.NodeAddressType    `json:"addressType,omitempty"`
+	Type                 string                    `json:"type"`
+	Name                 string                    `json:"name"`
+	ExternalStartingPort int32                     `json:"externalStartingPort"`
+	ContainerPort        int32                     `json:"containerPort"`
+	HostnameOverride     string                    `json:"hostnameOverride,omitempty"`
+	Overrides            ExternalListenerOverrides `json:"overrides,omitempty"`
+}
+
+type ExternalListenerOverrides struct {
+	Brokers []BrokersConfigOverride `json:"brokers,omitempty"`
+}
+
+type BrokersConfigOverride struct {
+	Id             int32  `json:"id"`
+	NodePort       int32  `json:"nodePort,omitempty"`
+	ReadOnlyConfig string `json:"readOnlyConfig,omitempty"`
 }
 
 // InternalListenerConfig defines the internal listener config for Kafka
