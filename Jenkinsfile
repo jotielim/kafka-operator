@@ -47,9 +47,11 @@ node {
 
                 sh "docker login 10.76.48.106:5000 --username $USERNAME --password $PASSWORD "
 
-                sh "docker tag $image_name 10.76.48.106:5000/repository/pandora/$image_name:v1 "
+                sh "docker tag $image_name 10.76.48.106:5000/repository/pandora/kafka/$image_name:0.9.2 "
 
-                sh "docker push 10.76.48.106:5000/repository/pandora/$image_name:v1"
+                sh "docker push 10.76.48.106:5000/repository/pandora/kafka/$image_name:0.9.2"
+
+                sh "docker rmi -f 10.76.48.106:5000/repository/pandora/$image_name:v1"
             }
         }
     }
