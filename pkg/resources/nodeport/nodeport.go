@@ -63,7 +63,7 @@ func (r *Reconciler) Reconcile(log logr.Logger) error {
 				serviceName := fmt.Sprintf("%s-external-bootstrap", r.KafkaCluster.Name)
 				selector := map[string]string{
 					"app":      "kafka",
-					"kafka_cr": "kafka",
+					"kafka_cr": r.KafkaCluster.Name,
 				}
 				svc := r.nodePort(log, externalListenerConfig, serviceName, selector, externalListenerConfig.ExternalStartingPort)
 				if err := k8sutil.Reconcile(log, r.Client, svc, r.KafkaCluster); err != nil {
@@ -80,7 +80,7 @@ func (r *Reconciler) Reconcile(log logr.Logger) error {
 					serviceName := fmt.Sprintf("%s-%d-svc", r.KafkaCluster.Name, broker.Id)
 					selector := map[string]string{
 						"app":      "kafka",
-						"kafka_cr": "kafka",
+						"kafka_cr": r.KafkaCluster.Name,
 						"brokerId": strconv.Itoa(int(broker.Id)),
 					}
 					nodePort := getBrokerNodePort(externalListenerConfig, broker.Id)
