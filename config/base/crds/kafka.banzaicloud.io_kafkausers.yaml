@@ -49,6 +49,10 @@ spec:
               type: array
             includeJKS:
               type: boolean
+            ipAddresses:
+              items:
+                type: string
+              type: array
             secretName:
               type: string
             topicGrants:

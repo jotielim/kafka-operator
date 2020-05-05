@@ -264,6 +264,7 @@ func (r *Reconciler) Reconcile(log logr.Logger) error {
 	}
 
 	lbIPs := make([]string, 0)
+	externalIps := make([]string, 0)
 
 	if r.KafkaCluster.Spec.ListenersConfig.ExternalListeners != nil {
 		// TODO: This is a hack that needs to be banished when the time is right.
@@ -273,11 +274,19 @@ func (r *Reconciler) Reconcile(log logr.Logger) error {
 			// first element of slice will be used for external advertised listener
 			lbIPs = append(lbIPs, r.KafkaCluster.Spec.ListenersConfig.ExternalListeners[0].HostnameOverride)
 		}
-		lbIP, err := getLoadBalancerIP(r.Client, r.KafkaCluster.Namespace, r.KafkaCluster.Spec.GetIngressController(), r.KafkaCluster.Name, log)
-		if err != nil {
-			return err
+		if r.KafkaCluster.Spec.ListenersConfig.ExternalListeners[0].ServiceType != string(corev1.ServiceTypeNodePort) {
+			lbIP, err := getLoadBalancerIP(r.Client, r.KafkaCluster.Namespace, r.KafkaCluster.Spec.GetIngressController(), r.KafkaCluster.Name, log)
+			if err != nil {
+				return err
+			}
+			lbIPs = append(lbIPs, lbIP)
 		}
-		lbIPs = append(lbIPs, lbIP)
+		if dnsNames := r.KafkaCluster.Spec.ListenersConfig.ExternalListeners[0].Overrides.DNSNames; dnsNames != nil {
+			lbIPs = append(lbIPs, dnsNames...)
+		}
+		if ipAddresses := r.KafkaCluster.Spec.ListenersConfig.ExternalListeners[0].Overrides.IPAddresses; ipAddresses != nil {
+			externalIps = append(externalIps, ipAddresses...)
+		}
 	}
 	//TODO remove after testing
 	//lBIp := "192.168.0.1"
@@ -285,7 +294,7 @@ func (r *Reconciler) Reconcile(log logr.Logger) error {
 	// Setup the PKI if using SSL
 	if r.KafkaCluster.Spec.ListenersConfig.SSLSecrets != nil {
 		// reconcile the PKI
-		if err := pki.GetPKIManager(r.Client, r.KafkaCluster).ReconcilePKI(context.TODO(), log, r.Scheme, lbIPs); err != nil {
+		if err := pki.GetPKIManager(r.Client, r.KafkaCluster).ReconcilePKI(context.TODO(), log, r.Scheme, lbIPs, externalIps); err != nil {
 			return err
 		}
 	}
@@ -310,13 +319,32 @@ func (r *Reconciler) Reconcile(log logr.Logger) error {
 			}
 
 		}
-		if r.KafkaCluster.Spec.RackAwareness == nil {
+		hasNodePort := false
+		hasNodeIp := false
+		for _, eListener := range r.KafkaCluster.Spec.ListenersConfig.ExternalListeners {
+			if eListener.ServiceType == string(corev1.ServiceTypeNodePort) {
+				hasNodePort = true
+				for _, brokerConfigOverride := range eListener.Overrides.Brokers {
+					if brokerConfigOverride.Id == broker.Id && strings.Contains(brokerConfigOverride.ReadOnlyConfig, "node.address=") {
+						hasNodeIp = true
+					}
+				}
+			}
+		}
+		if r.KafkaCluster.Spec.RackAwareness == nil && !hasNodePort {
 			o := r.configMap(broker.Id, brokerConfig, lbIPs, serverPass, clientPass, superUsers, log)
 			err := k8sutil.Reconcile(log, r.Client, o, r.KafkaCluster)
 			if err != nil {
 				return errors.WrapIfWithDetails(err, "failed to reconcile resource", "resource", o.GetObjectKind().GroupVersionKind())
 			}
 		} else {
+			if hasNodePort && hasNodeIp {
+				o := r.configMap(broker.Id, brokerConfig, lbIPs, serverPass, clientPass, superUsers, log)
+				err := k8sutil.Reconcile(log, r.Client, o, r.KafkaCluster)
+				if err != nil {
+					return errors.WrapIfWithDetails(err, "failed to reconcile resource", "resource", o.GetObjectKind().GroupVersionKind())
+				}
+			}
 			if brokerState, ok := r.KafkaCluster.Status.BrokersState[strconv.Itoa(int(broker.Id))]; ok {
 				if brokerState.RackAwarenessState != "" {
 					o := r.configMap(broker.Id, brokerConfig, lbIPs, serverPass, clientPass, superUsers, log)
@@ -341,7 +369,7 @@ func (r *Reconciler) Reconcile(log logr.Logger) error {
 			}
 		}
 		o := r.pod(broker.Id, brokerConfig, pvcs, log)
-		err = r.reconcileKafkaPod(log, o.(*corev1.Pod))
+		err = r.reconcileKafkaPod(log, o.(*corev1.Pod), hasNodePort)
 		if err != nil {
 			return err
 		}
@@ -500,12 +528,12 @@ func (r *Reconciler) reconcileClusterWideDynamicConfig(log logr.Logger) error {
 	return nil
 }
 
-func (r *Reconciler) reconcileKafkaPod(log logr.Logger, desiredPod *corev1.Pod) error {
+func (r *Reconciler) reconcileKafkaPod(log logr.Logger, desiredPod *corev1.Pod, hasNodePort bool) error {
 	currentPod := desiredPod.DeepCopy()
 	desiredType := reflect.TypeOf(desiredPod)
 
 	log = log.WithValues("kind", desiredType)
-	log.V(1).Info("searching with label because name is empty", "brokerId", desiredPod.Labels["brokerId"])
+	log.Info("searching with label because name is empty", "brokerId", desiredPod.Labels["brokerId"])
 
 	podList := &corev1.PodList{}
 
@@ -549,6 +577,16 @@ func (r *Reconciler) reconcileKafkaPod(log logr.Logger, desiredPod *corev1.Pod) 
 		currentPod = podList.Items[0].DeepCopy()
 		brokerId := currentPod.Labels["brokerId"]
 		if _, ok := r.KafkaCluster.Status.BrokersState[brokerId]; ok {
+			if hasNodePort {
+				nodePortState, err := k8sutil.UpdateCrWithNodePortConfig(currentPod, r.KafkaCluster, r.Client)
+				if err != nil {
+					return err
+				}
+				statusErr := k8sutil.UpdateBrokerStatus(r.Client, []string{brokerId}, r.KafkaCluster, nodePortState, log)
+				if statusErr != nil {
+					return errorfactory.New(errorfactory.StatusUpdateError{}, err, "updating status for resource failed", "kind", desiredType)
+				}
+			}
 			if currentPod.Spec.NodeName == "" {
 				log.Info(fmt.Sprintf("pod for brokerId %s does not scheduled to node yet", brokerId))
 			} else if r.KafkaCluster.Spec.RackAwareness != nil {

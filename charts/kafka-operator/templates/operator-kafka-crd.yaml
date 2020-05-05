@@ -1169,6 +1169,7 @@ spec:
               enum:
                 - envoy
                 - istioingress
+                - none
               type: string
             istioIngressConfig:
               description: IstioIngressConfig defines the config for the Istio Ingress
@@ -1345,6 +1346,24 @@ spec:
                       hostnameOverride:
                         type: string
                       name:
+                        type: string
+                      overrides:
+                        properties:
+                          brokers:
+                            items:
+                              properties:
+                                id:
+                                  format: int32
+                                  type: integer
+                                nodePort:
+                                  format: int32
+                                  type: integer
+                              required:
+                                - id
+                              type: object
+                            type: array
+                        type: object
+                      serviceType:
                         type: string
                       type:
                         type: string

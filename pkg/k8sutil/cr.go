@@ -75,6 +75,40 @@ func rackAwarenessLabelsToReadonlyConfig(pod *corev1.Pod, cr *v1beta1.KafkaClust
 	return v1beta1.RackAwarenessState(rackAwaranessState), brokerConfigs
 }
 
+func UpdateCrWithNodePortConfig(pod *corev1.Pod, cr *v1beta1.KafkaCluster, client runtimeClient.Client) (v1beta1.NodePortEnablementState, error) {
+
+	if pod.Spec.NodeName == "" {
+		return "", errorfactory.New(errorfactory.ResourceNotReady{}, errors.New("pod does not scheduled to node yet"), "trying")
+	}
+
+	brokerId := pod.Labels["brokerId"]
+	externalListeners := make([]v1beta1.ExternalListenerConfig, 0)
+	nodePortEnablementState := ""
+	for _, eListener := range cr.Spec.ListenersConfig.ExternalListeners {
+		if eListener.ServiceType == string(corev1.ServiceTypeNodePort) {
+			nodeAddress, err := getSpecificNodeAddress(pod.Spec.NodeName, client, eListener.NodeAddressType)
+			if err != nil {
+				return "", errorfactory.New(errorfactory.StatusUpdateError{}, err, "updating cr with node port info failed")
+			}
+
+			brokers := make([]v1beta1.BrokersConfigOverride, 0)
+			for _, brokerConfigOverride := range eListener.Overrides.Brokers {
+				if strconv.Itoa(int(brokerConfigOverride.Id)) == brokerId {
+					if !strings.Contains(brokerConfigOverride.ReadOnlyConfig, "node.address=") {
+						brokerConfigOverride.ReadOnlyConfig += fmt.Sprintf("node.address=%s\n", nodeAddress)
+					}
+				}
+				brokers = append(brokers, brokerConfigOverride)
+			}
+			eListener.Overrides.Brokers = brokers
+		}
+		externalListeners = append(externalListeners, eListener)
+	}
+	cr.Spec.ListenersConfig.ExternalListeners = externalListeners
+
+	return v1beta1.NodePortEnablementState(nodePortEnablementState), updateCr(cr, client)
+}
+
 // AddNewBrokerToCr modifies the CR and adds a new broker
 func AddNewBrokerToCr(broker v1beta1.Broker, crName, namespace string, client runtimeClient.Client) error {
 	cr, err := GetCr(crName, namespace, client)

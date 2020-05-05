@@ -158,6 +158,9 @@ func (c *certManager) clusterCertificateForUser(user *v1alpha1.KafkaUser, scheme
 	if user.Spec.DNSNames != nil && len(user.Spec.DNSNames) > 0 {
 		cert.Spec.DNSNames = user.Spec.DNSNames
 	}
+	if user.Spec.IPAddresses != nil && len(user.Spec.IPAddresses) > 0 {
+		cert.Spec.IPAddresses = user.Spec.IPAddresses
+	}
 	controllerutil.SetControllerReference(user, cert, scheme)
 	return cert
 }

@@ -1165,6 +1165,7 @@ spec:
               enum:
               - envoy
               - istioingress
+              - none
               type: string
             istioIngressConfig:
               description: IstioIngressConfig defines the config for the Istio Ingress
@@ -1330,6 +1331,8 @@ spec:
                     description: ExternalListenerConfig defines the external listener
                       config for Kafka
                     properties:
+                      addressType:
+                        type: string
                       containerPort:
                         format: int32
                         type: integer
@@ -1339,6 +1342,34 @@ spec:
                       hostnameOverride:
                         type: string
                       name:
+                        type: string
+                      overrides:
+                        properties:
+                          brokers:
+                            items:
+                              properties:
+                                id:
+                                  format: int32
+                                  type: integer
+                                nodePort:
+                                  format: int32
+                                  type: integer
+                                readOnlyConfig:
+                                  type: string
+                              required:
+                              - id
+                              type: object
+                            type: array
+                          dnsNames:
+                            items:
+                              type: string
+                            type: array
+                          ipAddresses:
+                            items:
+                              type: string
+                            type: array
+                        type: object
+                      serviceType:
                         type: string
                       type:
                         type: string
@@ -1523,6 +1554,10 @@ spec:
                     - cruiseControlState
                     - errorMessage
                     type: object
+                  nodePortState:
+                    description: NodePortEnablementState holds info about the node
+                      port enablement state
+                    type: string
                   rackAwarenessState:
                     description: RackAwarenessState holds info about rack awareness
                       status
@@ -1530,6 +1565,7 @@ spec:
                 required:
                 - configurationState
                 - gracefulActionState
+                - nodePortState
                 - rackAwarenessState
                 type: object
               type: object

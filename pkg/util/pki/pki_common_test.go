@@ -115,14 +115,15 @@ func TestGetInternalDNSNames(t *testing.T) {
 
 func TestBrokerUserForCluster(t *testing.T) {
 	cluster := testCluster(t)
-	user := BrokerUserForCluster(cluster, []string{})
+	user := BrokerUserForCluster(cluster, []string{}, []string{})
 
 	expected := &v1alpha1.KafkaUser{
 		ObjectMeta: templates.ObjectMeta(GetCommonName(cluster), LabelsForKafkaPKI(cluster.Name), cluster),
 		Spec: v1alpha1.KafkaUserSpec{
-			SecretName: fmt.Sprintf(BrokerServerCertTemplate, cluster.Name),
-			DNSNames:   GetInternalDNSNames(cluster),
-			IncludeJKS: true,
+			SecretName:  fmt.Sprintf(BrokerServerCertTemplate, cluster.Name),
+			DNSNames:    GetInternalDNSNames(cluster),
+			IPAddresses: make([]string, 0),
+			IncludeJKS:  true,
 			ClusterRef: v1alpha1.ClusterReference{
 				Name:      cluster.Name,
 				Namespace: cluster.Namespace,

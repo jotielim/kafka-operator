@@ -35,6 +35,9 @@ type ConfigurationState string
 // PKIBackend represents an interface implementing the PKIManager
 type PKIBackend string
 
+// NodePortState stores info about node port enablement status
+type NodePortEnablementState string
+
 const (
 	// PKIBackendCertManager invokes cert-manager for user certificate management
 	PKIBackendCertManager PKIBackend = "cert-manager"
@@ -62,6 +65,8 @@ type BrokerState struct {
 	GracefulActionState GracefulActionState `json:"gracefulActionState"`
 	// ConfigurationState holds info about the config
 	ConfigurationState ConfigurationState `json:"configurationState"`
+	// NodePortEnablementState holds info about the node port enablement state
+	NodePortEnablementState NodePortEnablementState `json:"nodePortState"`
 }
 
 const (
@@ -104,4 +109,6 @@ const (
 	ConfigInSync ConfigurationState = "ConfigInSync"
 	// ConfigOutOfSync states that the generated brokerConfig is out of sync with the Broker
 	ConfigOutOfSync ConfigurationState = "ConfigOutOfSync"
+	// Configured states
+	NodePortConfigured NodePortEnablementState = "NodePortConfigured"
 )
