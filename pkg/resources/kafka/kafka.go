@@ -240,9 +240,9 @@ func (r *Reconciler) Reconcile(log logr.Logger) error {
 	}
 
 	lbIPs := make([]string, 0)
+	externalIps := make([]string, 0)
 
-	if r.KafkaCluster.Spec.ListenersConfig.ExternalListeners != nil &&
-		r.KafkaCluster.Spec.ListenersConfig.ExternalListeners[0].ServiceType != string(corev1.ServiceTypeNodePort) {
+	if r.KafkaCluster.Spec.ListenersConfig.ExternalListeners != nil {
 		// TODO: This is a hack that needs to be banished when the time is right.
 		// Currently we only support one external listener but this will be fixed
 		// sometime in the future
@@ -250,11 +250,19 @@ func (r *Reconciler) Reconcile(log logr.Logger) error {
 			// first element of slice will be used for external advertised listener
 			lbIPs = append(lbIPs, r.KafkaCluster.Spec.ListenersConfig.ExternalListeners[0].HostnameOverride)
 		}
-		lbIP, err := getLoadBalancerIP(r.Client, r.KafkaCluster.Namespace, r.KafkaCluster.Spec.GetIngressController(), r.KafkaCluster.Name, log)
-		if err != nil {
-			return err
+		if r.KafkaCluster.Spec.ListenersConfig.ExternalListeners[0].ServiceType != string(corev1.ServiceTypeNodePort) {
+			lbIP, err := getLoadBalancerIP(r.Client, r.KafkaCluster.Namespace, r.KafkaCluster.Spec.GetIngressController(), r.KafkaCluster.Name, log)
+			if err != nil {
+				return err
+			}
+			lbIPs = append(lbIPs, lbIP)
 		}
-		lbIPs = append(lbIPs, lbIP)
+		if dnsNames := r.KafkaCluster.Spec.ListenersConfig.ExternalListeners[0].Overrides.DNSNames; dnsNames != nil {
+			lbIPs = append(lbIPs, dnsNames...)
+		}
+		if ipAddresses := r.KafkaCluster.Spec.ListenersConfig.ExternalListeners[0].Overrides.IPAddresses; ipAddresses != nil {
+			externalIps = append(externalIps, ipAddresses...)
+		}
 	}
 	//TODO remove after testing
 	//lBIp := "192.168.0.1"
@@ -262,7 +270,7 @@ func (r *Reconciler) Reconcile(log logr.Logger) error {
 	// Setup the PKI if using SSL
 	if r.KafkaCluster.Spec.ListenersConfig.SSLSecrets != nil {
 		// reconcile the PKI
-		if err := pki.GetPKIManager(r.Client, r.KafkaCluster).ReconcilePKI(context.TODO(), log, r.Scheme, lbIPs); err != nil {
+		if err := pki.GetPKIManager(r.Client, r.KafkaCluster).ReconcilePKI(context.TODO(), log, r.Scheme, lbIPs, externalIps); err != nil {
 			return err
 		}
 	}

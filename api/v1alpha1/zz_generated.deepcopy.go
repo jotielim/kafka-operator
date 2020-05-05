@@ -202,6 +202,11 @@ func (in *KafkaUserSpec) DeepCopyInto(out *KafkaUserSpec) {
 		*out = make([]string, len(*in))
 		copy(*out, *in)
 	}
+	if in.IPAddresses != nil {
+		in, out := &in.IPAddresses, &out.IPAddresses
+		*out = make([]string, len(*in))
+		copy(*out, *in)
+	}
 	if in.TopicGrants != nil {
 		in, out := &in.TopicGrants, &out.TopicGrants
 		*out = make([]UserTopicGrant, len(*in))

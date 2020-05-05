@@ -24,6 +24,7 @@ type KafkaUserSpec struct {
 	SecretName  string           `json:"secretName"`
 	ClusterRef  ClusterReference `json:"clusterRef"`
 	DNSNames    []string         `json:"dnsNames,omitempty"`
+	IPAddresses []string         `json:"ipAddresses,omitempty"`
 	TopicGrants []UserTopicGrant `json:"topicGrants,omitempty"`
 	IncludeJKS  bool             `json:"includeJKS,omitempty"`
 }

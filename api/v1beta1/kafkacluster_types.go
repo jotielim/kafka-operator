@@ -231,7 +231,9 @@ type ExternalListenerConfig struct {
 }
 
 type ExternalListenerOverrides struct {
-	Brokers []BrokersConfigOverride `json:"brokers,omitempty"`
+	Brokers     []BrokersConfigOverride `json:"brokers,omitempty"`
+	DNSNames    []string                `json:"dnsNames,omitempty"`
+	IPAddresses []string                `json:"ipAddresses,omitempty"`
 }
 
 type BrokersConfigOverride struct {
